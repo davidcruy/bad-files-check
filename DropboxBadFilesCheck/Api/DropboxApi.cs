@@ -70,11 +70,27 @@ namespace DropboxBadFilesCheck.Api
                 Content = new StringContent(requestContent, Encoding.UTF8, "application/json")
             };
 
-            var httpResponse = await _client.SendAsync(request, _token);
-            var responseContent = await httpResponse.Content.ReadAsStringAsync();
-            var listFolderResponse = JsonSerializer.Deserialize<T>(responseContent);
+            var retries = 0;
 
-            return listFolderResponse;
+            do
+            {
+                var httpResponse = await _client.SendAsync(request, _token);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                try
+                {
+                    var listFolderResponse = JsonSerializer.Deserialize<T>(responseContent);
+                    return listFolderResponse;
+                }
+                catch (JsonException)
+                {
+
+                }
+                
+                retries++;
+            } while (retries < 5);
+
+            throw new Exception("Request to Dropbox-API failed even after 5 retries...");
         }
     }
 }
