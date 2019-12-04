@@ -32,7 +32,9 @@ namespace DropboxBadFilesCheck.Api
 
             var listFolderRequest = new ListFolderRequest(path);
             var listFolderResponse = await PerformRequest<ListFolderRequest, ListFolderResponse>(listFolderRequest, "2/files/list_folder");
-            entries.AddRange(listFolderResponse.Entries);
+
+            if (listFolderResponse.Entries != null)
+                entries.AddRange(listFolderResponse.Entries);
 
             var hasMore = listFolderResponse.HasMore;
             var cursor = listFolderResponse.Cursor;
@@ -49,7 +51,8 @@ namespace DropboxBadFilesCheck.Api
                 var continueRequest = new ListFolderContinueRequest(cursor);
                 var continueResponse = await PerformRequest<ListFolderContinueRequest, ListFolderContinueResponse>(continueRequest, "2/files/list_folder/continue");
 
-                entries.AddRange(continueResponse.Entries);
+                if (continueResponse.Entries != null)
+                    entries.AddRange(continueResponse.Entries);
 
                 hasMore = continueResponse.HasMore;
                 cursor = continueResponse.Cursor;

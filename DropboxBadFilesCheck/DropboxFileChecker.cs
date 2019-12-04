@@ -1,23 +1,27 @@
-﻿using System;
+﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using DropboxBadFilesCheck.Api;
-using DropboxBadFilesCheck.Api.Dtos;
 
 namespace DropboxBadFilesCheck
 {
     internal class DropboxFileChecker
     {
-        private readonly List<FileEntry> _entries;
+        private readonly object _lock = new object();
+
+        private readonly List<DropboxFolder> _folders;
+        private readonly ConcurrentQueue<DropboxFolder> _toScan;
         private readonly CancellationToken _token;
+
+        private readonly List<DropboxWorker> _workers;
 
         public DropboxFileChecker(CancellationToken token)
         {
             _token = token;
-            _entries = new List<FileEntry>();
+            _folders = new List<DropboxFolder>();
+            _toScan = new ConcurrentQueue<DropboxFolder>();
+            _workers = new List<DropboxWorker>();
 
             ScanFinished = false;
         }
@@ -26,57 +30,87 @@ namespace DropboxBadFilesCheck
 
         public async Task DropboxBadFilesCheck(string bearer, int maxDepth)
         {
-            var api = new DropboxApi(bearer, _token);
+            InitializeWorkers(bearer);
+            var rootFolder = new DropboxFolder("", 0);
 
-            await ScanFolder(api, "", maxDepth);
+            _toScan.Enqueue(rootFolder);
+
+            while (Working() || _toScan.Count > 0)
+            {
+                var worker = GetAvailableWorker();
+
+                if (worker != null && _toScan.TryDequeue(out var workingFolder))
+                {
+                    worker.ScanFolder(workingFolder, maxDepth);
+                    continue;
+                }
+
+                await Task.Delay(100, _token);
+            }
 
             ScanFinished = true;
+        }
 
-            Console.WriteLine("Scan finished...");
-            Console.WriteLine($"Total files: {_entries.Count}");
+        private bool Working() => _workers.Any(w => w.IsWorking);
 
-            var invalidFiles = _entries.Where(e => IsInvalidFileName(e.Name)).ToList();
-            Console.WriteLine($"Invalid files: {invalidFiles.Count}");
+        private DropboxWorker GetAvailableWorker()
+        {
+            var worker = _workers.FirstOrDefault(w => w.IsWorking == false);
+            return worker;
+        }
 
-            foreach (var fileEntry in invalidFiles)
+        private void InitializeWorkers(string bearer)
+        {
+            for (var i = 0; i < 32; i++)
             {
-                Console.WriteLine(fileEntry.Name);
+                var worker = new DropboxWorker(bearer, _token);
+                worker.OnScanFinished += (folder, foundFolders) =>
+                {
+                    lock (_lock)
+                    {
+                        _folders.Add(folder);
+                    }
+
+                    foreach (var subFolder in foundFolders)
+                    {
+                        _toScan.Enqueue(subFolder);
+                    }
+                };
+
+                _workers.Add(worker);
             }
         }
 
-        public int GetEntryCount() => _entries.Count;
-
-        private async Task ScanFolder(DropboxApi api, string path, int maxDepth, int currentDepth = 0)
+        public int GetFolderCount()
         {
-            if (maxDepth != -1 && currentDepth >= maxDepth)
-                return;
-
-            var children = await api.ListFolder(path);
-
-            if (_token.IsCancellationRequested)
-                throw new TaskCanceledException();
-
-            _entries.AddRange(children.Where(e => e.Tag == "file"));
-
-            foreach (var subFolder in children.Where(e => e.Tag == "folder"))
+            lock (_lock)
             {
-                await ScanFolder(api, subFolder.PathLower, maxDepth, currentDepth + 1);
+                return _folders.Count;
             }
         }
 
-        private static bool IsInvalidFileName(string name)
+        public int GetFileCount()
         {
-            /*
-               < (less than)
-               > (greater than)
-               : (colon)
-               " (double quote)
-               | (vertical bar or pipe)
-               ? (question mark)
-               * (asterisk)
-               . (period) or a space at the end of a file or folder name
-             */
-            return Regex.IsMatch(name, @"^.*[""<>:\/\|?*]+.*$");
+            lock (_lock)
+            {
+                return _folders.Sum(f => f.FileCount);
+            }
+        }
+
+        public int GetInvalidFileCount()
+        {
+            lock (_lock)
+            {
+                return _folders.Sum(f => f.InvalidFileCount);
+            }
+        }
+
+        public IEnumerable<string> GetInvalidFiles()
+        {
+            lock (_lock)
+            {
+                return _folders.SelectMany(f => f.InvalidFiles);
+            }
         }
     }
 }

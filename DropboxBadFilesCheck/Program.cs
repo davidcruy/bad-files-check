@@ -21,54 +21,78 @@ namespace DropboxBadFilesCheck
             }
 
             using var cancellationTokenSource = new CancellationTokenSource();
+            var fileChecker = new DropboxFileChecker(cancellationTokenSource.Token);
 
-            var cancellationToken = cancellationTokenSource.Token;
+            Console.WriteLine("Press enter to cancel");
+
+            var longRunningTask = Task.Run(async () =>
+            {
+                try
+                {
+                    // ReSharper disable once AccessToDisposedClosure
+                    await fileChecker.DropboxBadFilesCheck(options.Bearer, options.MaxDepth);
+                }
+                catch (TaskCanceledException) { }
+            });
+
+#pragma warning disable 4014
+            var consoleTask = Task.Run(async () =>
+#pragma warning restore 4014
+            {
+                Console.CursorVisible = false;
+                Console.Write("Folders checked: 0\r\n"); // 17
+                Console.Write("Files checked: 0\r\n"); // 15
+                Console.Write("\\");
+
+                char[] loader = { '\\', '|', '/', '-', };
+                var loaderPos = 0;
+
+                const int leftFolders = 17;
+                const int leftFiles = 15;
+                const int leftLoader = 0;
+                var topFolders = Console.CursorTop - 2;
+                var topFiles = Console.CursorTop - 1;
+                var topLoader = Console.CursorTop;
+
+                do
+                {
+                    Console.SetCursorPosition(leftFolders, topFolders);
+                    Console.Write(fileChecker.GetFolderCount());
+
+                    Console.SetCursorPosition(leftFiles, topFiles);
+                    Console.Write(fileChecker.GetFileCount());
+
+                    Console.SetCursorPosition(leftLoader, topLoader);
+                    loaderPos = loaderPos + 1 == loader.Length ? 0 : loaderPos + 1;
+                    Console.Write(loader[loaderPos]);
+
+                    await Task.Delay(50);
+                } while (!cancellationTokenSource.IsCancellationRequested && !fileChecker.ScanFinished);
+
+                Console.SetCursorPosition(leftLoader, topLoader);
+                Console.Write(' ');
+
+                Console.WriteLine("\r\nScan finished...");
+                Console.WriteLine($"Total files: {fileChecker.GetFileCount()}");
+                Console.WriteLine($"Invalid files: {fileChecker.GetInvalidFileCount()}\r\n");
+
+                foreach (var fileEntry in fileChecker.GetInvalidFiles())
+                {
+                    Console.WriteLine(fileEntry);
+                }
+            });
 
 #pragma warning disable 4014
             Task.Run(() =>
 #pragma warning restore 4014
             {
-                Console.WriteLine("Press enter to cancel");
                 Console.ReadLine();
 
                 // ReSharper disable once AccessToDisposedClosure
                 cancellationTokenSource.Cancel();
             });
 
-            try
-            {
-                var fileChecker = new DropboxFileChecker(cancellationToken);
-
-                var longRunningTask = Task.Run(async () =>
-                {
-                    // ReSharper disable once AccessToDisposedClosure
-                    await fileChecker.DropboxBadFilesCheck(options.Bearer, options.MaxDepth);
-                }, cancellationToken);
-
-                var consoleTask = Task.Run(async () =>
-                {
-                    var lastCount = 0;
-                    Console.Write("Files checked: 0");
-
-                    do
-                    {
-                        Console.SetCursorPosition(Console.CursorLeft - lastCount.ToString().Length, Console.CursorTop);
-
-                        lastCount = fileChecker.GetEntryCount();
-                        Console.Write(lastCount);
-
-                        await Task.Delay(100, cancellationToken);
-                    }
-                    while (!fileChecker.ScanFinished);
-
-                }, cancellationToken);
-
-                await Task.WhenAll(longRunningTask, consoleTask);
-            }
-            catch (TaskCanceledException)
-            {
-                Console.WriteLine("Task was cancelled");
-            }
+            await Task.WhenAll(longRunningTask, consoleTask);
         }
 
         private static bool TryParseArgs(string[] args, out Options options)
