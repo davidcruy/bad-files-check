@@ -26,15 +26,26 @@ namespace DropboxBadFilesCheck.Api
             _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
         }
 
-        public async Task<IList<FileEntry>> ListFolder(string path)
+        public async Task<GetCurrentAccountResponse> GetCurrentAccount()
         {
-            var entries = new List<FileEntry>();
+            var getCurrentAccountResponse = await PerformRequest<GetCurrentAccountResponse>("2/users/get_current_account");
 
-            var listFolderRequest = new ListFolderRequest(path);
-            var listFolderResponse = await PerformRequest<ListFolderRequest, ListFolderResponse>(listFolderRequest, "2/files/list_folder");
+            return getCurrentAccountResponse;
+        }
+
+        public void SetPathRoot(string rootNamespaceId)
+        {
+            _client.DefaultRequestHeaders.Add("Dropbox-API-Path-Root", "{\".tag\": \"root\", \"root\": \"" + rootNamespaceId + "\"}");
+        }
+
+        public IEnumerable<FileEntry> ListFolder(string path)
+        {
+            var listFolderRequest = new ListFolderRequest(path, true);
+            var listFolderResponse = PerformRequest<ListFolderRequest, ListFolderResponse>(listFolderRequest, "2/files/list_folder").GetAwaiter().GetResult();
 
             if (listFolderResponse.Entries != null)
-                entries.AddRange(listFolderResponse.Entries);
+                foreach (var entry in listFolderResponse.Entries)
+                    yield return entry;
 
             var hasMore = listFolderResponse.HasMore;
             var cursor = listFolderResponse.Cursor;
@@ -49,16 +60,84 @@ namespace DropboxBadFilesCheck.Api
                 }
 
                 var continueRequest = new ListFolderContinueRequest(cursor);
-                var continueResponse = await PerformRequest<ListFolderContinueRequest, ListFolderContinueResponse>(continueRequest, "2/files/list_folder/continue");
+                var continueResponse = PerformRequest<ListFolderContinueRequest, ListFolderContinueResponse>(continueRequest, "2/files/list_folder/continue").GetAwaiter().GetResult();
 
                 if (continueResponse.Entries != null)
-                    entries.AddRange(continueResponse.Entries);
+                    foreach (var entry in continueResponse.Entries)
+                        yield return entry;
 
                 hasMore = continueResponse.HasMore;
                 cursor = continueResponse.Cursor;
             }
+        }
+
+        public async Task<IList<SharedFolderMetaData>> ListSharedFolders()
+        {
+            var entries = new List<SharedFolderMetaData>();
+
+            var listSharedFoldersRequest = new ListSharedFoldersRequest();
+            var listSharedFoldersResponse = await PerformRequest<ListSharedFoldersRequest, ListSharedFoldersResponse>(listSharedFoldersRequest, "2/sharing/list_folders");
+
+            if (listSharedFoldersResponse.Entries != null)
+                entries.AddRange(listSharedFoldersResponse.Entries);
+
+            var hasMore = !string.IsNullOrEmpty(listSharedFoldersResponse.Cursor);
+            var cursor = listSharedFoldersResponse.Cursor;
+            var counter = 0;
+
+            while (hasMore)
+            {
+                counter++;
+                if (counter > 1000)
+                {
+                    throw new Exception("List shared folder request overflow!");
+                }
+
+                var continueRequest = new ListSharedFoldersContinueRequest(cursor);
+                var continueResponse = await PerformRequest<ListSharedFoldersContinueRequest, ListSharedFoldersContinueResponse>(continueRequest, "2/sharing/list_folders/continue");
+
+                if (continueResponse.Entries != null)
+                    entries.AddRange(continueResponse.Entries);
+
+                hasMore = !string.IsNullOrEmpty(continueResponse.Cursor);
+                cursor = continueResponse.Cursor;
+            }
 
             return entries;
+        }
+
+        private async Task<T> PerformRequest<T>(string path)
+        {
+            if (_token.IsCancellationRequested)
+                throw new TaskCanceledException();
+
+            var request = new HttpRequestMessage(HttpMethod.Post, path);
+
+            var retries = 0;
+
+            do
+            {
+                var httpResponse = await _client.SendAsync(request, _token);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                try
+                {
+                    var deserializedResponse = JsonSerializer.Deserialize<T>(responseContent);
+                    return deserializedResponse;
+                }
+                catch (JsonException ex)
+                {
+                    throw new Exception($"JSON: {responseContent}\r\n\r\nFailed to parse JSON data from API", ex);
+                }
+                catch (Exception)
+                {
+                    // Unknown Exception
+                }
+
+                retries++;
+            } while (retries < 5);
+
+            throw new Exception("Request to Dropbox-API failed even after 5 retries...");
         }
 
         private async Task<T> PerformRequest<TApi, T>(TApi apiRequest, string path)
@@ -82,12 +161,16 @@ namespace DropboxBadFilesCheck.Api
 
                 try
                 {
-                    var listFolderResponse = JsonSerializer.Deserialize<T>(responseContent);
-                    return listFolderResponse;
+                    var deserializedResponse = JsonSerializer.Deserialize<T>(responseContent);
+                    return deserializedResponse;
                 }
-                catch (JsonException)
+                catch (JsonException ex)
                 {
-
+                    throw new Exception($"JSON: {responseContent}\r\n\r\nFailed to parse JSON data from API", ex);
+                }
+                catch (Exception)
+                {
+                    // Unknown Exception
                 }
                 
                 retries++;

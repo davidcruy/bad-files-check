@@ -1,8 +1,8 @@
-﻿using System.Collections.Concurrent;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DropboxBadFilesCheck.Api;
 
 namespace DropboxBadFilesCheck
 {
@@ -10,82 +10,53 @@ namespace DropboxBadFilesCheck
     {
         private readonly object _lock = new object();
 
-        private readonly List<DropboxFolder> _folders;
-        private readonly ConcurrentQueue<DropboxFolder> _toScan;
+        private readonly DropboxFolder _root;
         private readonly CancellationToken _token;
 
-        private readonly List<DropboxWorker> _workers;
+        private DropboxApi _api;
 
         public DropboxFileChecker(CancellationToken token)
         {
             _token = token;
-            _folders = new List<DropboxFolder>();
-            _toScan = new ConcurrentQueue<DropboxFolder>();
-            _workers = new List<DropboxWorker>();
+            _root = new DropboxFolder("");
 
             ScanFinished = false;
         }
 
         public bool ScanFinished { get; private set; }
 
-        public async Task DropboxBadFilesCheck(string bearer, int maxDepth)
+        public async Task DropboxBadFilesCheck(string bearer)
         {
-            InitializeWorkers(bearer);
-            var rootFolder = new DropboxFolder("", 0);
+            _api = new DropboxApi(bearer, _token);
+            var currentAccount = await _api.GetCurrentAccount();
+            var rootNamespaceId = currentAccount?.RootInfo?.RootNamespaceId;
 
-            _toScan.Enqueue(rootFolder);
+            _api.SetPathRoot(rootNamespaceId);
 
-            while (Working() || _toScan.Count > 0)
+            if (string.IsNullOrEmpty(rootNamespaceId))
             {
-                var worker = GetAvailableWorker();
-
-                if (worker != null && _toScan.TryDequeue(out var workingFolder))
-                {
-                    worker.ScanFolder(workingFolder, maxDepth);
-                    continue;
-                }
-
-                await Task.Delay(100, _token);
+                ScanFinished = true;
+                return;
             }
+
+            PerformScan();
 
             ScanFinished = true;
         }
 
-        private bool Working() => _workers.Any(w => w.IsWorking);
-
-        private DropboxWorker GetAvailableWorker()
+        private void PerformScan()
         {
-            var worker = _workers.FirstOrDefault(w => w.IsWorking == false);
-            return worker;
-        }
-
-        private void InitializeWorkers(string bearer)
-        {
-            for (var i = 0; i < 32; i++)
+            foreach (var fileEntry in _api.ListFolder(""))
             {
-                var worker = new DropboxWorker(bearer, _token);
-                worker.OnScanFinished += (folder, foundFolders) =>
+                if (fileEntry.Tag == "file")
                 {
                     lock (_lock)
                     {
-                        _folders.Add(folder);
+                        _root.AddFile(fileEntry);
                     }
+                }
 
-                    foreach (var subFolder in foundFolders)
-                    {
-                        _toScan.Enqueue(subFolder);
-                    }
-                };
-
-                _workers.Add(worker);
-            }
-        }
-
-        public int GetFolderCount()
-        {
-            lock (_lock)
-            {
-                return _folders.Count;
+                _token.ThrowIfCancellationRequested();
             }
         }
 
@@ -93,7 +64,7 @@ namespace DropboxBadFilesCheck
         {
             lock (_lock)
             {
-                return _folders.Sum(f => f.FileCount);
+                return _root.FileCount;
             }
         }
 
@@ -101,7 +72,7 @@ namespace DropboxBadFilesCheck
         {
             lock (_lock)
             {
-                return _folders.Sum(f => f.InvalidFileCount);
+                return _root.InvalidFileCount;
             }
         }
 
@@ -109,7 +80,7 @@ namespace DropboxBadFilesCheck
         {
             lock (_lock)
             {
-                return _folders.SelectMany(f => f.InvalidFiles);
+                return _root.InvalidFiles.Select(i => i.PathLower + ": " + i.Name);
             }
         }
     }

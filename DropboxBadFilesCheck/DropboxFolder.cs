@@ -1,42 +1,42 @@
 ﻿using System.Collections.Generic;
-using System.Linq;
 using System.Text.RegularExpressions;
+using DropboxBadFilesCheck.Api.Dtos;
 
 namespace DropboxBadFilesCheck
 {
     public class DropboxFolder
     {
-        public DropboxFolder(string path, int depth)
+        public DropboxFolder(string path)
         {
             Path = path;
-            Depth = depth;
             IsScanned = false;
             HasInvalidFiles = false;
-            Files = new List<string>();
-            InvalidFiles = new List<string>();
+            Files = new List<FileEntry>();
+            InvalidFiles = new List<FileEntry>();
         }
 
-        public void AddFiles(IList<string> files)
+        public void AddFile(FileEntry fileEntry)
         {
-            Files.AddRange(files);
-            InvalidFiles.AddRange(files.Where(IsInvalidFileName).ToList());
+            Files.Add(fileEntry);
+            FileCount++;
 
-            HasInvalidFiles = InvalidFiles.Any();
-
-            FileCount = Files.Count;
-            InvalidFileCount = InvalidFiles.Count;
+            if (IsInvalidFileName(fileEntry.Name))
+            {
+                InvalidFiles.Add(fileEntry);
+                HasInvalidFiles = true;
+                InvalidFileCount++;
+            }
         }
 
         public string Path { get; }
-        public int Depth { get; }
         public bool IsScanned { get; set; }
         public bool HasInvalidFiles { get; private set; }
 
         public int FileCount { get; private set; }
         public int InvalidFileCount { get; private set; }
 
-        public List<string> Files { get; }
-        public List<string> InvalidFiles { get; }
+        public List<FileEntry> Files { get; }
+        public List<FileEntry> InvalidFiles { get; }
 
         private static bool IsInvalidFileName(string name)
         {

@@ -16,7 +16,7 @@ namespace DropboxBadFilesCheck
         {
             if (!TryParseArgs(args, out var options))
             {
-                Console.WriteLine("Usage: dropbox-bfc.exe [-d depth] bearer");
+                Console.WriteLine("Usage: dropbox-bfc.exe bearer");
                 return;
             }
 
@@ -30,7 +30,7 @@ namespace DropboxBadFilesCheck
                 try
                 {
                     // ReSharper disable once AccessToDisposedClosure
-                    await fileChecker.DropboxBadFilesCheck(options.Bearer, options.MaxDepth);
+                    await fileChecker.DropboxBadFilesCheck(options.Bearer);
                 }
                 catch (TaskCanceledException) { }
             });
@@ -40,25 +40,19 @@ namespace DropboxBadFilesCheck
 #pragma warning restore 4014
             {
                 Console.CursorVisible = false;
-                Console.Write("Folders checked: 0\r\n"); // 17
                 Console.Write("Files checked: 0\r\n"); // 15
                 Console.Write("\\");
 
                 char[] loader = { '\\', '|', '/', '-', };
                 var loaderPos = 0;
 
-                const int leftFolders = 17;
                 const int leftFiles = 15;
                 const int leftLoader = 0;
-                var topFolders = Console.CursorTop - 2;
                 var topFiles = Console.CursorTop - 1;
                 var topLoader = Console.CursorTop;
 
                 do
                 {
-                    Console.SetCursorPosition(leftFolders, topFolders);
-                    Console.Write(fileChecker.GetFolderCount());
-
                     Console.SetCursorPosition(leftFiles, topFiles);
                     Console.Write(fileChecker.GetFileCount());
 

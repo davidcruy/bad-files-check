@@ -2,9 +2,9 @@
 
 namespace DropboxBadFilesCheck.Api.Dtos
 {
-    public class ListFolderContinueRequest : ApiRequest<ListFolderContinueResponse>
+    public class ListSharedFoldersContinueRequest : ApiRequest<ListSharedFoldersContinueResponse>
     {
-        public ListFolderContinueRequest(string cursor)
+        public ListSharedFoldersContinueRequest(string cursor)
         {
             Cursor = cursor;
         }

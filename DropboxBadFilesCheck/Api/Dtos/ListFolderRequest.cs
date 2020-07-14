@@ -4,10 +4,10 @@ namespace DropboxBadFilesCheck.Api.Dtos
 {
     public class ListFolderRequest : ApiRequest<ListFolderResponse>
     {
-        public ListFolderRequest(string path)
+        public ListFolderRequest(string path, bool recursive)
         {
             Path = path;
-            Recursive = false;
+            Recursive = recursive;
             IncludeMediaInfo = false;
             IncludeDeleted = false;
             IncludeHasExplicitSharedMembers = false;
