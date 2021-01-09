@@ -5,9 +5,10 @@ Usage:
 ```
 dropbox-bfc.exe -o output.csv -f bearer
 ```
-- o output.csv: output bad files in an output-file.
-- f: fix bad files
 - bearer: a Dropbox API bearer token
+- (OPTIONAL) o output.csv: output bad files in an output-file.
+- (OPTIONAL) f: fix bad files
+
 
 # How do I get a token?
 At this moment I have not created a public App yet on Dropbox API. So you need to visit the Developer site yourself:
