@@ -3,8 +3,10 @@ Console application that performs a bad files check with Dropbox API. This proje
 
 Usage:
 ```
-dropbox-bfc.exe bearer
+dropbox-bfc.exe -o output.csv -f bearer
 ```
+- o output.csv: output bad files in an output-file.
+- f: fix bad files
 - bearer: a Dropbox API bearer token
 
 # How do I get a token?
