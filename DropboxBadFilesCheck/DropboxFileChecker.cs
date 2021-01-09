@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DropboxBadFilesCheck.Api;
+using DropboxBadFilesCheck.Api.Dtos;
 
 namespace DropboxBadFilesCheck
 {
@@ -25,7 +26,7 @@ namespace DropboxBadFilesCheck
 
         public bool ScanFinished { get; private set; }
 
-        public async Task DropboxBadFilesCheck(string bearer)
+        public async Task DropboxBadFilesCheck(string bearer, bool fixInvalidFiles)
         {
             _api = new DropboxApi(bearer, _token);
             var currentAccount = await _api.GetCurrentAccount();
@@ -39,12 +40,12 @@ namespace DropboxBadFilesCheck
                 return;
             }
 
-            PerformScan();
+            await PerformScan(fixInvalidFiles);
 
             ScanFinished = true;
         }
 
-        private void PerformScan()
+        private async Task PerformScan(bool fixInvalidFiles)
         {
             foreach (var fileEntry in _api.ListFolder(""))
             {
@@ -57,6 +58,20 @@ namespace DropboxBadFilesCheck
                 }
 
                 _token.ThrowIfCancellationRequested();
+            }
+
+            if (fixInvalidFiles)
+            {
+                foreach (var invalidFile in GetInvalidFiles())
+                {
+                    var fromPath = invalidFile.PathDisplay;
+
+                    var path = fromPath.Substring(0, fromPath.Length - invalidFile.Name.Length);
+                    var toPath = path + invalidFile.GetValidFileName();
+                    var movedPath = await _api.Move(fromPath, toPath);
+
+                    invalidFile.MovedPath = movedPath;
+                }
             }
         }
 
@@ -76,11 +91,19 @@ namespace DropboxBadFilesCheck
             }
         }
 
-        public IEnumerable<string> GetInvalidFiles()
+        public List<FileEntry> GetInvalidFiles()
         {
             lock (_lock)
             {
-                return _root.InvalidFiles.Select(i => i.PathLower + ": " + i.Name);
+                return _root.InvalidFiles;
+            }
+        }
+
+        public int GetFixedCount()
+        {
+            lock (_lock)
+            {
+                return _root.InvalidFiles.Count(f => !string.IsNullOrEmpty(f.MovedPath));
             }
         }
     }

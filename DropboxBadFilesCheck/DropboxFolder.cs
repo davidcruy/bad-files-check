@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using DropboxBadFilesCheck.Api.Dtos;
 
 namespace DropboxBadFilesCheck
@@ -13,6 +12,8 @@ namespace DropboxBadFilesCheck
             HasInvalidFiles = false;
             Files = new List<FileEntry>();
             InvalidFiles = new List<FileEntry>();
+
+            InvalidFileCount = 0;
         }
 
         public void AddFile(FileEntry fileEntry)
@@ -20,7 +21,7 @@ namespace DropboxBadFilesCheck
             Files.Add(fileEntry);
             FileCount++;
 
-            if (IsInvalidFileName(fileEntry.Name))
+            if (fileEntry.IsInvalidFileName())
             {
                 InvalidFiles.Add(fileEntry);
                 HasInvalidFiles = true;
@@ -37,20 +38,5 @@ namespace DropboxBadFilesCheck
 
         public List<FileEntry> Files { get; }
         public List<FileEntry> InvalidFiles { get; }
-
-        private static bool IsInvalidFileName(string name)
-        {
-            /*
-               < (less than)
-               > (greater than)
-               : (colon)
-               " (double quote)
-               | (vertical bar or pipe)
-               ? (question mark)
-               * (asterisk)
-               . (period) or a space at the end of a file or folder name
-             */
-            return Regex.IsMatch(name, @"^.*[""<>:\/\|?*]+.*$");
-        }
     }
 }

@@ -71,6 +71,20 @@ namespace DropboxBadFilesCheck.Api
             }
         }
 
+        public async Task<string> Move(string fromPath, string toPath)
+        {
+            var moveRequest = new MoveRequest(fromPath, toPath);
+            var moveResponse = await PerformRequest<MoveRequest, MoveResponse>(moveRequest, "2/files/move_v2");
+
+            if (!string.IsNullOrEmpty(moveResponse.ErrorSummary))
+            {
+                throw new Exception($"Move files returned an error: {moveResponse.ErrorSummary}");
+            }
+
+            var path = moveResponse.MetaData?.PathLower;
+            return path;
+        }
+
         public async Task<IList<SharedFolderMetaData>> ListSharedFolders()
         {
             var entries = new List<SharedFolderMetaData>();
