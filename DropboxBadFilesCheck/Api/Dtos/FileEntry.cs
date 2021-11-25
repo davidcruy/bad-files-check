@@ -5,17 +5,13 @@ namespace DropboxBadFilesCheck.Api.Dtos
 {
     public class FileEntry
     {
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
+        [JsonPropertyName("name")] public string Name { get; set; }
 
-        [JsonPropertyName(".tag")]
-        public string Tag { get; set; }
+        [JsonPropertyName(".tag")] public string Tag { get; set; }
 
-        [JsonPropertyName("path_lower")]
-        public string PathLower { get; set; }
+        [JsonPropertyName("path_lower")] public string PathLower { get; set; }
 
-        [JsonPropertyName("path_display")]
-        public string PathDisplay { get; set; }
+        [JsonPropertyName("path_display")] public string PathDisplay { get; set; }
 
         public string MovedPath { get; set; }
 

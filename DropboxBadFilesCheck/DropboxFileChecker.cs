@@ -9,7 +9,7 @@ namespace DropboxBadFilesCheck
 {
     internal class DropboxFileChecker
     {
-        private readonly object _lock = new object();
+        private readonly object _lock = new();
 
         private readonly DropboxFolder _root;
         private readonly CancellationToken _token;
@@ -57,6 +57,14 @@ namespace DropboxBadFilesCheck
                     }
                 }
 
+                if (fileEntry.Tag == "folder")
+                {
+                    lock (_lock)
+                    {
+                        _root.AddFolder(fileEntry);
+                    }
+                }
+
                 _token.ThrowIfCancellationRequested();
             }
 
@@ -66,11 +74,22 @@ namespace DropboxBadFilesCheck
                 {
                     var fromPath = invalidFile.PathDisplay;
 
-                    var path = fromPath.Substring(0, fromPath.Length - invalidFile.Name.Length);
+                    var path = fromPath[..^invalidFile.Name.Length];
                     var toPath = path + invalidFile.GetValidFileName();
                     var movedPath = await _api.Move(fromPath, toPath);
 
                     invalidFile.MovedPath = movedPath;
+                }
+
+                foreach (var invalidFolder in GetInvalidFolders())
+                {
+                    var fromPath = invalidFolder.PathDisplay;
+
+                    var path = fromPath[..^invalidFolder.Name.Length];
+                    var toPath = path + invalidFolder.GetValidFileName();
+                    var movedPath = await _api.Move(fromPath, toPath);
+
+                    invalidFolder.MovedPath = movedPath;
                 }
             }
         }
@@ -83,11 +102,27 @@ namespace DropboxBadFilesCheck
             }
         }
 
+        public int GetFolderCount()
+        {
+            lock (_lock)
+            {
+                return _root.FolderCount;
+            }
+        }
+
         public int GetInvalidFileCount()
         {
             lock (_lock)
             {
                 return _root.InvalidFileCount;
+            }
+        }
+
+        public int GetInvalidFolderCount()
+        {
+            lock (_lock)
+            {
+                return _root.InvalidFolderCount;
             }
         }
 
@@ -99,11 +134,27 @@ namespace DropboxBadFilesCheck
             }
         }
 
+        public List<FileEntry> GetInvalidFolders()
+        {
+            lock (_lock)
+            {
+                return _root.InvalidFolders;
+            }
+        }
+
         public int GetFixedCount()
         {
             lock (_lock)
             {
                 return _root.InvalidFiles.Count(f => !string.IsNullOrEmpty(f.MovedPath));
+            }
+        }
+
+        public int GetFolderFixedCount()
+        {
+            lock (_lock)
+            {
+                return _root.InvalidFolders.Count(f => !string.IsNullOrEmpty(f.MovedPath));
             }
         }
     }

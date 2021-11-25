@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,8 +39,10 @@ namespace DropboxBadFilesCheck
                     // ReSharper disable once AccessToDisposedClosure
                     await fileChecker.DropboxBadFilesCheck(options.Bearer, options.FixInvalidFiles);
                 }
-                catch (TaskCanceledException) { }
-            });
+                catch (TaskCanceledException)
+                {
+                }
+            }, cancellationTokenSource.Token);
 
 #pragma warning disable 4014
             var consoleTask = Task.Run(async () =>
@@ -46,52 +50,64 @@ namespace DropboxBadFilesCheck
             {
                 Console.CursorVisible = false;
                 Console.Write("Files checked: 0\r\n"); // 15
+                Console.Write("Folders checked: 0\r\n"); // 17
+                Console.Write("Invalid files: 0\r\n"); // 15
                 Console.Write("Files fixed: 0\r\n"); // 13
+                Console.Write("Invalid folders: 0\r\n"); // 17
+                Console.Write("Folders fixed: 0\r\n"); // 15
                 Console.Write("\\");
 
                 char[] loader = { '\\', '|', '/', '-', };
                 var loaderPos = 0;
 
-                const int leftFiles = 15;
-                const int leftFixes = 13;
+                var files = new Point(15, Console.CursorTop - 6);
+                var folders = new Point(17, Console.CursorTop - 5);
+                var invalidFilesPos = new Point(15, Console.CursorTop - 4);
+                var filesFixed = new Point(13, Console.CursorTop - 3);
+                var invalidFoldersPos = new Point(17, Console.CursorTop - 2);
+                var foldersFixed = new Point(15, Console.CursorTop - 1);
+
                 const int leftLoader = 0;
-                var topFiles = Console.CursorTop - 2;
-                var topFixes = Console.CursorTop - 1;
                 var topLoader = Console.CursorTop;
 
                 do
                 {
-                    Console.SetCursorPosition(leftFiles, topFiles);
-                    Console.Write(fileChecker.GetFileCount());
+                    UpdateConsole(files, fileChecker, folders, invalidFilesPos, filesFixed, invalidFoldersPos, foldersFixed, leftLoader, topLoader, loaderPos, loader);
 
-                    Console.SetCursorPosition(leftFixes, topFixes);
-                    Console.Write(fileChecker.GetFixedCount());
-
-                    Console.SetCursorPosition(leftLoader, topLoader);
-                    loaderPos = loaderPos + 1 == loader.Length ? 0 : loaderPos + 1;
-                    Console.Write(loader[loaderPos]);
-
-                    await Task.Delay(50);
+                    await Task.Delay(50, cancellationTokenSource.Token);
                 } while (!cancellationTokenSource.IsCancellationRequested && !fileChecker.ScanFinished);
+
+                // 1 more time
+                UpdateConsole(files, fileChecker, folders, invalidFilesPos, filesFixed, invalidFoldersPos, foldersFixed, leftLoader, topLoader, loaderPos, loader);
 
                 Console.SetCursorPosition(leftLoader, topLoader);
                 Console.Write(' ');
 
                 Console.WriteLine("\r\nScan finished...");
-                Console.WriteLine($"Total files: {fileChecker.GetFileCount()}");
-                Console.WriteLine($"Invalid files: {fileChecker.GetInvalidFileCount()}\r\n");
 
                 var invalidFiles = fileChecker.GetInvalidFiles();
-                foreach (var fileEntry in invalidFiles)
+                if (invalidFiles.Any())
                 {
-                    Console.WriteLine(fileEntry.PathLower);
+                    Console.WriteLine("\r\nInvalid files:");
+                    foreach (var fileEntry in invalidFiles) Console.WriteLine(fileEntry.PathLower);
                 }
+                else
+                    Console.WriteLine("\r\nNo invalid files.");
+
+                var invalidFolders = fileChecker.GetInvalidFolders();
+                if (invalidFolders.Any())
+                {
+                    Console.WriteLine("\r\nInvalid folders:");
+                    foreach (var fileEntry in invalidFolders) Console.WriteLine(fileEntry.PathLower);
+                }
+                else
+                    Console.WriteLine("\r\nNo invalid folders.");
 
                 if (!string.IsNullOrEmpty(options.OutputFile))
                 {
-                    WriteToOutputFile(invalidFiles, options.OutputFile);
+                    WriteToOutputFile(invalidFiles, invalidFolders, options.OutputFile);
                 }
-            });
+            }, cancellationTokenSource.Token);
 
 #pragma warning disable 4014
             Task.Run(() =>
@@ -101,9 +117,34 @@ namespace DropboxBadFilesCheck
 
                 // ReSharper disable once AccessToDisposedClosure
                 cancellationTokenSource.Cancel();
-            });
+            }, cancellationTokenSource.Token);
 
             await Task.WhenAll(longRunningTask, consoleTask);
+        }
+
+        private static void UpdateConsole(Point files, DropboxFileChecker fileChecker, Point folders, Point invalidFilesPos, Point filesFixed, Point invalidFolders, Point foldersFixed, int leftLoader, int topLoader, int loaderPos, char[] loader)
+        {
+            Console.SetCursorPosition(files.X, files.Y);
+            Console.Write(fileChecker.GetFileCount());
+
+            Console.SetCursorPosition(folders.X, folders.Y);
+            Console.Write(fileChecker.GetFolderCount());
+
+            Console.SetCursorPosition(invalidFilesPos.X, invalidFilesPos.Y);
+            Console.Write(fileChecker.GetInvalidFileCount());
+
+            Console.SetCursorPosition(filesFixed.X, filesFixed.Y);
+            Console.Write(fileChecker.GetFixedCount());
+
+            Console.SetCursorPosition(invalidFolders.X, invalidFolders.Y);
+            Console.Write(fileChecker.GetInvalidFolderCount());
+
+            Console.SetCursorPosition(foldersFixed.X, foldersFixed.Y);
+            Console.Write(fileChecker.GetFolderFixedCount());
+
+            Console.SetCursorPosition(leftLoader, topLoader);
+            loaderPos = loaderPos + 1 == loader.Length ? 0 : loaderPos + 1;
+            Console.Write(loader[loaderPos]);
         }
 
         private static bool TryParseArgs(string[] args, out Options options)
@@ -142,11 +183,11 @@ namespace DropboxBadFilesCheck
             return true;
         }
 
-        private static void WriteToOutputFile(IEnumerable<FileEntry> files, string outputFileName)
+        private static void WriteToOutputFile(IEnumerable<FileEntry> files, IEnumerable<FileEntry> folders, string outputFileName)
         {
             var builder = new StringBuilder();
 
-            builder.AppendLine("Filename,Path,MovedPath");
+            builder.AppendLine("Filename,Foldername,Path,MovedPath");
 
             foreach (var file in files)
             {
@@ -154,7 +195,16 @@ namespace DropboxBadFilesCheck
                 var path = PrepareForCsv(file.PathLower);
                 var movedPath = PrepareForCsv(file.MovedPath);
 
-                builder.AppendLine(fileName + "," + path + "," + movedPath);
+                builder.AppendLine(fileName + ",," + path + "," + movedPath);
+            }
+
+            foreach (var folder in folders)
+            {
+                var fileName = PrepareForCsv(folder.Name);
+                var path = PrepareForCsv(folder.PathLower);
+                var movedPath = PrepareForCsv(folder.MovedPath);
+
+                builder.AppendLine("," + fileName + "," + path + "," + movedPath);
             }
 
             File.WriteAllText(outputFileName, builder.ToString());
