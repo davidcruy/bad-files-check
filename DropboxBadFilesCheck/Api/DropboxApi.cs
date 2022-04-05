@@ -38,10 +38,10 @@ namespace DropboxBadFilesCheck.Api
             _client.DefaultRequestHeaders.Add("Dropbox-API-Path-Root", "{\".tag\": \"root\", \"root\": \"" + rootNamespaceId + "\"}");
         }
 
-        public IEnumerable<FileEntry> ListFolder(string path)
+        public async IAsyncEnumerable<FileEntry> ListFolder(string path)
         {
             var listFolderRequest = new ListFolderRequest(path, true);
-            var listFolderResponse = PerformRequest<ListFolderRequest, ListFolderResponse>(listFolderRequest, "2/files/list_folder").GetAwaiter().GetResult();
+            var listFolderResponse = await PerformRequest<ListFolderRequest, ListFolderResponse>(listFolderRequest, "2/files/list_folder");
 
             if (listFolderResponse.Entries != null)
                 foreach (var entry in listFolderResponse.Entries)
@@ -54,13 +54,13 @@ namespace DropboxBadFilesCheck.Api
             while (hasMore)
             {
                 counter++;
-                if (counter > 1000)
+                if (counter > 100000)
                 {
                     throw new Exception("List folder request overflow!");
                 }
 
                 var continueRequest = new ListFolderContinueRequest(cursor);
-                var continueResponse = PerformRequest<ListFolderContinueRequest, ListFolderContinueResponse>(continueRequest, "2/files/list_folder/continue").GetAwaiter().GetResult();
+                var continueResponse = await PerformRequest<ListFolderContinueRequest, ListFolderContinueResponse>(continueRequest, "2/files/list_folder/continue");
 
                 if (continueResponse.Entries != null)
                     foreach (var entry in continueResponse.Entries)
@@ -132,7 +132,7 @@ namespace DropboxBadFilesCheck.Api
             do
             {
                 var httpResponse = await _client.SendAsync(request, _token);
-                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+                var responseContent = await httpResponse.Content.ReadAsStringAsync(_token);
 
                 try
                 {
@@ -171,7 +171,7 @@ namespace DropboxBadFilesCheck.Api
             do
             {
                 var httpResponse = await _client.SendAsync(request, _token);
-                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+                var responseContent = await httpResponse.Content.ReadAsStringAsync(_token);
 
                 try
                 {

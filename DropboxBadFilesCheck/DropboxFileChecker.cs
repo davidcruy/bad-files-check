@@ -47,7 +47,7 @@ namespace DropboxBadFilesCheck
 
         private async Task PerformScan(bool fixInvalidFiles)
         {
-            foreach (var fileEntry in _api.ListFolder(""))
+            await foreach (var fileEntry in _api.ListFolder("").WithCancellation(_token))
             {
                 if (fileEntry.Tag == "file")
                 {

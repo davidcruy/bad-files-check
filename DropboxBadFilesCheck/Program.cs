@@ -41,6 +41,11 @@ namespace DropboxBadFilesCheck
                 }
                 catch (TaskCanceledException)
                 {
+                    Console.WriteLine("Task was cancelled!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Unknown Exception occurred:\r\n" + ex);
                 }
             }, cancellationTokenSource.Token);
 
@@ -57,9 +62,6 @@ namespace DropboxBadFilesCheck
                 Console.Write("Folders fixed: 0\r\n"); // 15
                 Console.Write("\\");
 
-                char[] loader = { '\\', '|', '/', '-', };
-                var loaderPos = 0;
-
                 var files = new Point(15, Console.CursorTop - 6);
                 var folders = new Point(17, Console.CursorTop - 5);
                 var invalidFilesPos = new Point(15, Console.CursorTop - 4);
@@ -72,13 +74,13 @@ namespace DropboxBadFilesCheck
 
                 do
                 {
-                    UpdateConsole(files, fileChecker, folders, invalidFilesPos, filesFixed, invalidFoldersPos, foldersFixed, leftLoader, topLoader, loaderPos, loader);
+                    UpdateConsole(files, fileChecker, folders, invalidFilesPos, filesFixed, invalidFoldersPos, foldersFixed, leftLoader, topLoader);
 
                     await Task.Delay(50, cancellationTokenSource.Token);
                 } while (!cancellationTokenSource.IsCancellationRequested && !fileChecker.ScanFinished);
 
                 // 1 more time
-                UpdateConsole(files, fileChecker, folders, invalidFilesPos, filesFixed, invalidFoldersPos, foldersFixed, leftLoader, topLoader, loaderPos, loader);
+                UpdateConsole(files, fileChecker, folders, invalidFilesPos, filesFixed, invalidFoldersPos, foldersFixed, leftLoader, topLoader);
 
                 Console.SetCursorPosition(leftLoader, topLoader);
                 Console.Write(' ');
@@ -122,7 +124,10 @@ namespace DropboxBadFilesCheck
             await Task.WhenAll(longRunningTask, consoleTask);
         }
 
-        private static void UpdateConsole(Point files, DropboxFileChecker fileChecker, Point folders, Point invalidFilesPos, Point filesFixed, Point invalidFolders, Point foldersFixed, int leftLoader, int topLoader, int loaderPos, char[] loader)
+        private static int _loaderPos;
+        static readonly char[] LoaderValues = { '\\', '|', '/', '-', };
+
+        private static void UpdateConsole(Point files, DropboxFileChecker fileChecker, Point folders, Point invalidFilesPos, Point filesFixed, Point invalidFolders, Point foldersFixed, int leftLoader, int topLoader)
         {
             Console.SetCursorPosition(files.X, files.Y);
             Console.Write(fileChecker.GetFileCount());
@@ -143,8 +148,8 @@ namespace DropboxBadFilesCheck
             Console.Write(fileChecker.GetFolderFixedCount());
 
             Console.SetCursorPosition(leftLoader, topLoader);
-            loaderPos = loaderPos + 1 == loader.Length ? 0 : loaderPos + 1;
-            Console.Write(loader[loaderPos]);
+            _loaderPos = _loaderPos + 1 == LoaderValues.Length ? 0 : _loaderPos + 1;
+            Console.Write(LoaderValues[_loaderPos]);
         }
 
         private static bool TryParseArgs(string[] args, out Options options)
