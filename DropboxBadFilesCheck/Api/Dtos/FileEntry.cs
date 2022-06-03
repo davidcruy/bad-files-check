@@ -25,15 +25,16 @@ namespace DropboxBadFilesCheck.Api.Dtos
                | (vertical bar or pipe)
                ? (question mark)
                * (asterisk)
+               t (tab) 
                . (period) or a space at the end of a file or folder name
              */
-            return Regex.IsMatch(Name, @"^.*[""<>:\/\|?*]+.*$");
+            return Regex.IsMatch(Name, @"^.*[""<>:\/\|?*\t]+.*$");
         }
 
         public string GetValidFileName()
         {
             var validFilename = Name;
-            var charsToRemove = new[] { "<", ">", ":", "\"", "|", "?", "*" };
+            var charsToRemove = new[] { "<", ">", ":", "\"", "|", "?", "*", "\t" };
 
             foreach (var c in charsToRemove)
             {
