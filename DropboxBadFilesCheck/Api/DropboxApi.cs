@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -125,14 +126,18 @@ namespace DropboxBadFilesCheck.Api
             if (_token.IsCancellationRequested)
                 throw new TaskCanceledException();
 
-            var request = new HttpRequestMessage(HttpMethod.Post, path);
-
             var retries = 0;
 
             do
             {
+                retries++;
+
+                var request = new HttpRequestMessage(HttpMethod.Post, path);
                 var httpResponse = await _client.SendAsync(request, _token);
                 var responseContent = await httpResponse.Content.ReadAsStringAsync(_token);
+
+                if (string.IsNullOrEmpty(responseContent))
+                    continue;
 
                 try
                 {
@@ -147,31 +152,34 @@ namespace DropboxBadFilesCheck.Api
                 {
                     // Unknown Exception
                 }
-
-                retries++;
             } while (retries < 5);
 
             throw new Exception("Request to Dropbox-API failed even after 5 retries...");
         }
 
+        [RequiresUnreferencedCode("Calls System.Text.Json.JsonSerializer.Serialize<TApi>(TApi, System.Text.Json.JsonSerializerOptions?)")]
         private async Task<T> PerformRequest<TApi, T>(TApi apiRequest, string path)
             where TApi : ApiRequest<T>
         {
             if (_token.IsCancellationRequested)
                 throw new TaskCanceledException();
 
-            var requestContent = JsonSerializer.Serialize(apiRequest);
-            var request = new HttpRequestMessage(HttpMethod.Post, path)
-            {
-                Content = new StringContent(requestContent, Encoding.UTF8, "application/json")
-            };
-
             var retries = 0;
 
             do
             {
+                retries++;
+
+                var requestContent = JsonSerializer.Serialize(apiRequest);
+                var request = new HttpRequestMessage(HttpMethod.Post, path)
+                {
+                    Content = new StringContent(requestContent, Encoding.UTF8, "application/json")
+                };
                 var httpResponse = await _client.SendAsync(request, _token);
                 var responseContent = await httpResponse.Content.ReadAsStringAsync(_token);
+
+                if (string.IsNullOrEmpty(responseContent))
+                    continue;
 
                 try
                 {
@@ -186,8 +194,6 @@ namespace DropboxBadFilesCheck.Api
                 {
                     // Unknown Exception
                 }
-                
-                retries++;
             } while (retries < 5);
 
             throw new Exception("Request to Dropbox-API failed even after 5 retries...");
