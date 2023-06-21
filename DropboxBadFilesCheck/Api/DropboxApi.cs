@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -176,6 +177,14 @@ namespace DropboxBadFilesCheck.Api
                     Content = new StringContent(requestContent, Encoding.UTF8, "application/json")
                 };
                 var httpResponse = await _client.SendAsync(request, _token);
+
+                // too_many_write_operations, this happens when we are calling "move" too many times
+                if (httpResponse.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), _token);
+                    continue;
+                }
+
                 var responseContent = await httpResponse.Content.ReadAsStringAsync(_token);
 
                 if (string.IsNullOrEmpty(responseContent))
